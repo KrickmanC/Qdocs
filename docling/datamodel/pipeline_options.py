@@ -1914,7 +1914,7 @@ class PdfPipelineOptions(PaginatedPipelineOptions):
                 "`StandardPdfPipeline` (threaded mode)."
             )
         ),
-    ] = 4
+    ] = 1
     layout_batch_size: Annotated[
         int,
         Field(
@@ -1924,7 +1924,7 @@ class PdfPipelineOptions(PaginatedPipelineOptions):
                 "`StandardPdfPipeline` (threaded mode)."
             )
         ),
-    ] = 4
+    ] = 1
     table_batch_size: Annotated[
         int,
         Field(
@@ -1934,7 +1934,7 @@ class PdfPipelineOptions(PaginatedPipelineOptions):
                 "`StandardPdfPipeline` (threaded mode)."
             )
         ),
-    ] = 4
+    ] = 1
 
     # Timing control
     batch_polling_interval_seconds: Annotated[
@@ -1957,7 +1957,7 @@ class PdfPipelineOptions(PaginatedPipelineOptions):
                 "space is available. Only used by `StandardPdfPipeline` (threaded mode)."
             )
         ),
-    ] = 100
+    ] = 2
 
 
 class ProcessingPipeline(str, Enum):

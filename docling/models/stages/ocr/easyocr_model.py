@@ -157,7 +157,9 @@ class EasyOcrModel(BaseOcrModel):
                         high_res_image = page._backend.get_page_image(
                             scale=self.scale, cropbox=ocr_rect
                         )
-                        im = numpy.array(high_res_image)
+                        # Avoid a second full-resolution pixel-buffer allocation. EasyOCR
+                        # accepts NumPy views and does not require a writable input array.
+                        im = numpy.asarray(high_res_image)
 
                         with warnings.catch_warnings():
                             if self.options.suppress_mps_warnings:
@@ -165,7 +167,16 @@ class EasyOcrModel(BaseOcrModel):
                                     "ignore", message=".*pin_memory.*MPS.*"
                                 )
 
-                            result = self.reader.readtext(im)
+                            # Keep EasyOCR recognition bounded to one in-process worker and
+                            # one image per batch. Explicit values protect large scanned PDFs
+                            # from future changes to EasyOCR's own defaults.
+                            result = self.reader.readtext(
+                                im,
+                                detail=1,
+                                paragraph=False,
+                                batch_size=1,
+                                workers=0,
+                            )
 
                         del high_res_image
                         del im

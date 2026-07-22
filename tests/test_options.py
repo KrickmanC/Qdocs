@@ -58,6 +58,15 @@ def get_converters_with_table_options():
             yield converter
 
 
+def test_pdf_pipeline_defaults_bound_rendered_page_memory():
+    pipeline_options = PdfPipelineOptions()
+
+    assert pipeline_options.queue_max_size == 2
+    assert pipeline_options.ocr_batch_size == 1
+    assert pipeline_options.layout_batch_size == 1
+    assert pipeline_options.table_batch_size == 1
+
+
 def test_accelerator_options():
     # Check the default options
     ao = AcceleratorOptions()

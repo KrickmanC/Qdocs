@@ -31,13 +31,22 @@ from docling.datamodel.pipeline_options import (
 )
 
 pipeline_options = ThreadedPdfPipelineOptions(
-    ocr_batch_size=64,  # default 4
-    layout_batch_size=64,  # default 4
-    table_batch_size=4,  # currently not using GPU batching
+    ocr_batch_size=64,  # memory-safe default: 1
+    layout_batch_size=64,  # memory-safe default: 1
+    table_batch_size=4,  # memory-safe default: 1; currently not using GPU batching
 )
 ```
 
-Setting a higher `page_batch_size` will run the Docling models (in particular the layout detection stage) with a GPU batch inference mode.
+The defaults favor bounded memory use on long, scanned documents. Increase the stage
+batch sizes only after measuring available RAM and accelerator memory. The inter-stage
+queue likewise defaults to two rendered pages; increasing `queue_max_size` can improve
+throughput, but every queued page may retain a full-resolution image. Setting a higher
+`page_batch_size` will run the Docling models (in particular the layout detection stage)
+with a GPU batch inference mode.
+
+Reuse the same `DocumentConverter` for repeated conversions. Initialized pipelines and
+their OCR, layout, and table models are cached on the converter; creating multiple
+converter instances duplicates those model weights in memory.
 
 #### Complete example
 
