@@ -56,6 +56,7 @@ The following table shows all processing stages in Docling, their model families
           <li><strong>Tesseract</strong> (CLI or Python bindings)</li>
           <li><strong>EasyOCR</strong></li>
           <li><strong>RapidOCR</strong> (ONNX, OpenVINO, PaddlePaddle)</li>
+          <li><strong>PaddleOCR-VL-1.6</strong> (with PP-DocLayoutV3)</li>
           <li><strong>macOS Vision</strong> (native macOS)</li>
           <li><strong>SuryaOCR</strong></li>
         </ul>
@@ -225,6 +226,7 @@ The following table shows all processing stages in Docling, their model families
 | Tesseract | CLI or tesserocr | 100+ languages | Most widely used, good accuracy |
 | EasyOCR | PyTorch | 80+ languages | GPU-accelerated, good for Asian languages |
 | RapidOCR | ONNX/OpenVINO/Paddle | Multiple | Fast, multiple backend options |
+| PaddleOCR-VL-1.6 | PaddlePaddle or Transformers | 109 languages, automatic detection | Complete document pipeline with fixed PP-DocLayoutV3 layout analysis |
 | macOS Vision | Native macOS | 20+ languages | macOS only, excellent quality |
 | SuryaOCR | PyTorch | 90+ languages | Modern, good for complex layouts |
 | Auto | Automatic | Varies | Automatically selects best available engine |

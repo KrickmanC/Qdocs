@@ -387,7 +387,7 @@ class ConvertDocumentsOptions(BaseModel):
         Field(
             default="auto",
             description="Preset ID for OCR engine.",
-            examples=["auto", "easyocr", "tesseract"],
+            examples=["auto", "easyocr", "paddleocr-vl-1.6", "tesseract"],
         ),
     ] = "auto"
 

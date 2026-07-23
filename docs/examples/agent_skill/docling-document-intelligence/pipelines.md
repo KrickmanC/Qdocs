@@ -75,6 +75,7 @@ All engines are plug-and-play via the CLI `--ocr-engine` flag or the Python
 |--------|----------|-------|
 | EasyOCR | `--ocr-engine easyocr` (default) | No extra pip beyond docling defaults |
 | RapidOCR | `--ocr-engine rapidocr` | Lightweight; see Docling notes on read-only FS |
+| PaddleOCR-VL-1.6 | `--ocr-engine paddleocr-vl-1.6` | Uses the complete PaddleOCR-VL pipeline with PP-DocLayoutV3; language is automatic |
 | Tesseract (Python) | `--ocr-engine tesserocr` | Needs `pip install tesserocr` and system Tesseract |
 | Tesseract (CLI) | `--ocr-engine tesseract` | Shells out to `tesseract` binary |
 | macOS Vision | `--ocr-engine ocrmac` | macOS only |
@@ -93,6 +94,10 @@ opts = PdfPipelineOptions(do_ocr=True, ocr_options=TesseractOcrOptions())
 # RapidOCR (lightweight, no C deps)
 from docling.datamodel.pipeline_options import RapidOcrOptions
 opts = PdfPipelineOptions(do_ocr=True, ocr_options=RapidOcrOptions())
+
+# PaddleOCR-VL-1.6 (requires the paddleocr extra and an inference runtime)
+from docling.datamodel.pipeline_options import PaddleOcrVlOptions
+opts = PdfPipelineOptions(do_ocr=True, ocr_options=PaddleOcrVlOptions())
 
 # macOS native OCR
 from docling.datamodel.pipeline_options import OcrMacOptions

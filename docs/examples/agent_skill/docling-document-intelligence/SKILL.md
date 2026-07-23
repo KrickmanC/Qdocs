@@ -63,7 +63,7 @@ Docling has two pipeline families. Pick based on document type and hardware.
 | **VLM** | `--pipeline vlm` | Complex layouts, handwriting, formulas | Needs GPU; slower |
 
 See [pipelines.md](pipelines.md) for the full decision matrix, OCR engine table
-(EasyOCR, RapidOCR, Tesseract, macOS), and VLM model presets.
+(EasyOCR, RapidOCR, PaddleOCR-VL, Tesseract, macOS), and VLM model presets.
 
 ### 3. Convert the document
 

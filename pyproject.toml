@@ -195,6 +195,10 @@ feat-ocr-rapidocr-onnx = [
   'onnxruntime>=1.7.0,<2.0.0 ; python_version < "3.14"',
 ]
 
+feat-ocr-paddleocr = [
+  'paddleocr[doc-parser]>=3.6.0,<4.0.0',
+]
+
 feat-ocr-easyocr = [
   'easyocr>=1.7,<2.0',
   # easyocr declares scikit-image with no lower bound; without this pin,
@@ -288,7 +292,7 @@ all = [
   # (Python.h) plus a C compiler to build from source. `all` must install
   # cleanly without a compiler, so speaker diarization stays opt-in via
   # docling-slim[format-video].
-  'docling-slim[standard,models-vlm-inline,format-audio,format-html-render,format-xml-jats,format-xml-uspto,format-xml-xbrl,models-remote,models-onnxruntime,feat-ocr-easyocr,feat-ocr-tesserocr,feat-ocr-mac]',
+  'docling-slim[standard,models-vlm-inline,format-audio,format-html-render,format-xml-jats,format-xml-uspto,format-xml-xbrl,models-remote,models-onnxruntime,feat-ocr-easyocr,feat-ocr-paddleocr,feat-ocr-tesserocr,feat-ocr-mac]',
 ]
 
 [dependency-groups]
@@ -474,6 +478,7 @@ allowed-unresolved-imports = [
   "networkx.**",
   "ocrmac.**",
   "onnxruntime.**",
+  "paddleocr.**",
   "pylatexenc.**",
   "pypdfium2.**",
   "qwen_vl_utils.**",

@@ -56,7 +56,7 @@ For a complete example see [gpu_standard_pipeline.py](../examples/gpu_standard_p
 
 The current Docling OCR engines rely on third-party libraries, hence GPU support depends on the availability in the respective engines.
 
-The only setup which is known to work at the moment is RapidOCR with the torch backend, which can be enabled via
+RapidOCR can use the torch backend:
 
 ```py
 pipeline_options = PdfPipelineOptions()
@@ -65,7 +65,24 @@ pipeline_options.ocr_options = RapidOcrOptions(
 )
 ```
 
-More details in the GitHub discussion [#2451](https://github.com/docling-project/docling/discussions/2451).
+PaddleOCR-VL-1.6 uses PaddlePaddle and always runs together with
+PP-DocLayoutV3. The available devices depend on the installed PaddlePaddle
+runtime; see the [PaddleOCR hardware support matrix](https://www.paddleocr.ai/latest/en/version3.x/pipeline_usage/PaddleOCR-VL.html#paddleocr-vl-inference-method-and-hardware-support-matrix).
+Docling runs this pipeline in an isolated worker process so PaddlePaddle CUDA
+can coexist with PyTorch-based Docling stages built for a different CUDA minor
+release.
+
+```py
+from docling.datamodel.accelerator_options import AcceleratorOptions
+from docling.datamodel.pipeline_options import PaddleOcrVlOptions, PdfPipelineOptions
+
+pipeline_options = PdfPipelineOptions(
+    accelerator_options=AcceleratorOptions(device="cuda"),
+    ocr_options=PaddleOcrVlOptions(),
+)
+```
+
+More RapidOCR details are available in the GitHub discussion [#2451](https://github.com/docling-project/docling/discussions/2451).
 
 
 ### VLM Pipeline

@@ -171,8 +171,8 @@ class OcrOptions(BaseOptions):
     See Also:
         `OcrAutoOptions`: Automatic engine selection based on availability.
         `EasyOcrOptions`, `TesseractCliOcrOptions`, `TesseractOcrOptions`,
-        `RapidOcrOptions`, `OcrMacOptions`, `NemotronOcrOptions`: Engine-specific
-        configurations.
+        `RapidOcrOptions`, `PaddleOcrVlOptions`, `OcrMacOptions`,
+        `NemotronOcrOptions`: Engine-specific configurations.
     """
 
     lang: Annotated[
@@ -334,6 +334,100 @@ class RapidOcrOptions(OcrOptions):
     model_config = ConfigDict(
         extra="forbid",
     )
+
+
+class PaddleOcrVlOptions(OcrOptions):
+    """Configuration for the PaddleOCR-VL-1.6 document OCR pipeline.
+
+    PaddleOCR-VL is used as its complete document parsing pipeline: the
+    PP-DocLayoutV3 layout-analysis stage detects and orders regions before
+    PaddleOCR-VL-1.6 recognizes their contents. Language selection is automatic.
+    """
+
+    kind: ClassVar[Literal["paddleocr-vl-1.6"]] = "paddleocr-vl-1.6"
+    lang: Annotated[
+        list[str],
+        Field(
+            description=(
+                "Ignored by PaddleOCR-VL-1.6. The model detects supported "
+                "languages automatically."
+            )
+        ),
+    ] = []
+    scale: Annotated[
+        float,
+        Field(
+            description=(
+                "Scale factor used to render page regions before PaddleOCR-VL "
+                "inference. A value of 3 corresponds to 216 DPI for PDF pages."
+            ),
+            gt=0,
+        ),
+    ] = 3.0
+    engine: Annotated[
+        Optional[Literal["paddle"]],
+        Field(
+            description=(
+                "Use PaddleOCR's per-model Paddle engine selection for both "
+                "PP-DocLayoutV3 and PaddleOCR-VL-1.6. None selects the same "
+                "default behavior."
+            )
+        ),
+    ] = None
+    layout_detection_model_dir: Annotated[
+        Optional[str],
+        Field(
+            description=(
+                "Local PP-DocLayoutV3 model directory. When omitted, PaddleOCR "
+                "downloads the official model."
+            )
+        ),
+    ] = None
+    vl_rec_model_dir: Annotated[
+        Optional[str],
+        Field(
+            description=(
+                "Local PaddleOCR-VL-1.6-0.9B model directory. When omitted, "
+                "PaddleOCR downloads the official model."
+            )
+        ),
+    ] = None
+    layout_threshold: Annotated[
+        Optional[float],
+        Field(
+            description=(
+                "PP-DocLayoutV3 score threshold. None uses the official pipeline "
+                "default."
+            ),
+            ge=0.0,
+            le=1.0,
+        ),
+    ] = None
+    use_doc_orientation_classify: Annotated[
+        bool,
+        Field(description="Enable PaddleOCR document orientation classification."),
+    ] = False
+    use_doc_unwarping: Annotated[
+        bool,
+        Field(description="Enable PaddleOCR document image unwarping."),
+    ] = False
+    use_chart_recognition: Annotated[
+        bool,
+        Field(description="Enable PaddleOCR chart parsing."),
+    ] = False
+    use_seal_recognition: Annotated[
+        bool,
+        Field(description="Enable PaddleOCR seal recognition."),
+    ] = False
+    use_ocr_for_image_block: Annotated[
+        bool,
+        Field(description="Recognize text inside image layout blocks."),
+    ] = False
+    format_block_content: Annotated[
+        bool,
+        Field(description="Format recognized block content as Markdown."),
+    ] = False
+    model_config = ConfigDict(extra="forbid")
 
 
 class NemotronOcrOptions(OcrOptions):

@@ -79,6 +79,7 @@ The following table summarizes the extras available in the `docling` package. Th
 | `asr` | Installs dependencies for running the ASR pipeline. |
 | `vlm` | Installs dependencies for running the VLM pipeline. |
 | `easyocr` | Installs the [EasyOCR](https://github.com/JaidedAI/EasyOCR) OCR engine. |
+| `paddleocr` | Installs the [PaddleOCR-VL](https://www.paddleocr.ai/latest/en/version3.x/pipeline_usage/PaddleOCR-VL.html) document parser. Install a supported inference runtime separately. |
 | `feat-ocr-nemotron` | Installs NVIDIA Nemotron OCR. Supported only on Linux x86_64 with Python 3.12 and CUDA 13.x. |
 | `tesserocr` | Installs the Tesseract binding for using it as OCR engine. |
 | `ocrmac` | Installs the OcrMac OCR engine. |
@@ -96,6 +97,7 @@ the following engines.
 | ------ | ------------ | ----- |
 | [EasyOCR](https://github.com/JaidedAI/EasyOCR) | `easyocr` extra or via `pip install easyocr`. | `EasyOcrOptions` |
 | [Nemotron OCR](https://huggingface.co/nvidia/nemotron-ocr-v1) | `feat-ocr-nemotron` extra. Supported only on Linux x86_64 with Python 3.12 and CUDA 13.x. See installation note below. | `NemotronOcrOptions` |
+| [PaddleOCR-VL-1.6](https://www.paddleocr.ai/latest/en/version3.x/pipeline_usage/PaddleOCR-VL.html) | `paddleocr` extra plus a supported PaddleOCR inference runtime. See installation note below. | `PaddleOcrVlOptions` |
 | Tesseract | System dependency. See description for Tesseract and Tesserocr below.  | `TesseractOcrOptions` |
 | Tesseract CLI | System dependency. See description below. | `TesseractCliOcrOptions` |
 | OcrMac | System dependency. See description below. | `OcrMacOptions` |
@@ -120,6 +122,40 @@ doc_converter = DocumentConverter(
     format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)}
 )
 ```
+
+??? "PaddleOCR-VL-1.6 installation"
+
+    Docling runs the complete PaddleOCR-VL-1.6 pipeline and fixes its layout
+    stage to PP-DocLayoutV3. PaddleOCR detects the document language automatically,
+    so `ocr_lang` is not used by this engine.
+
+    Install one of the inference runtimes supported by PaddleOCR, followed by the
+    Docling extra. For example, for x64 CPU inference with PaddlePaddle:
+
+    ```console
+    pip install "paddlepaddle>=3.2.1,<4" \
+      --index-url https://www.paddlepaddle.org.cn/packages/stable/cpu/
+    pip install "docling[paddleocr]"
+    ```
+
+    Select it in Python or on the CLI:
+
+    ```python
+    from docling.datamodel.pipeline_options import PaddleOcrVlOptions, PdfPipelineOptions
+
+    pipeline_options = PdfPipelineOptions(
+        do_ocr=True,
+        ocr_options=PaddleOcrVlOptions(),
+    )
+    ```
+
+    ```console
+    docling --ocr-engine paddleocr-vl-1.6 INPUT
+    ```
+
+    The official PP-DocLayoutV3 and PaddleOCR-VL-1.6-0.9B weights are downloaded
+    on first use. For offline operation, set `layout_detection_model_dir` and
+    `vl_rec_model_dir` on `PaddleOcrVlOptions`.
 
 ??? "Tesseract installation"
 
