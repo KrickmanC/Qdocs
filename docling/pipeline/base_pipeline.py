@@ -139,6 +139,9 @@ class BasePipeline(ABC):
     def _unload(self, conv_res: ConversionResult):
         pass
 
+    def close(self) -> None:
+        """Release resources that remain allocated between conversions."""
+
     @classmethod
     @abstractmethod
     def get_default_options(cls) -> PipelineOptions:

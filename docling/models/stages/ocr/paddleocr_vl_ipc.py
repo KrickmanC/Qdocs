@@ -13,9 +13,9 @@ class InitializeRequest:
 
 @dataclass(frozen=True)
 class PredictRequest:
-    """Run PaddleOCR-VL for one BGR image."""
+    """Run PaddleOCR-VL for a batch of BGR images."""
 
-    image: numpy.ndarray
+    images: list[numpy.ndarray]
 
 
 @dataclass(frozen=True)

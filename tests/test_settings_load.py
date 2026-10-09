@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 pytestmark = pytest.mark.cross_platform
@@ -8,6 +10,7 @@ def _setup_env(monkeypatch):
     monkeypatch.setenv("DOCLING_DEBUG_VISUALIZE_RAW_LAYOUT", "True")
     monkeypatch.setenv("DOCLING_ARTIFACTS_PATH", "/path/to/artifacts")
     monkeypatch.setenv("DOCLING_INFERENCE_COMPILE_TORCH_MODELS", "True")
+    monkeypatch.setenv("DOCLING_RESOURCES_RELEASE_AFTER_CONVERSION", "True")
 
 
 def test_settings(monkeypatch):
@@ -21,12 +24,13 @@ def test_settings(monkeypatch):
     importlib.reload(m)
 
     # Check top level setting
-    assert str(m.settings.artifacts_path) == "/path/to/artifacts"
+    assert m.settings.artifacts_path == Path("/path/to/artifacts")
 
     # Check nested set via environment variables
     assert m.settings.perf.page_batch_size == 12
     assert m.settings.debug.visualize_raw_layout is True
     assert m.settings.inference.compile_torch_models is True
+    assert m.settings.resources.release_after_conversion is True
 
     # Check nested defaults
     assert m.settings.perf.doc_batch_size == 1
@@ -68,10 +72,12 @@ def test_scoped_settings_restores_state():
             perf=settings_module.BatchConcurrencySettings(page_batch_size=99),
             debug=settings_module.DebugSettings(profile_pipeline_timings=True),
             inference=settings_module.InferenceSettings(compile_torch_models=False),
+            resources=settings_module.ResourceSettings(release_after_conversion=True),
         ):
             assert settings_module.settings.perf.page_batch_size == 99
             assert settings_module.settings.debug.profile_pipeline_timings is True
             assert settings_module.settings.inference.compile_torch_models is False
+            assert settings_module.settings.resources.release_after_conversion is True
             raise RuntimeError("boom")
 
     assert settings_module.settings.model_dump(mode="json") == original.model_dump(

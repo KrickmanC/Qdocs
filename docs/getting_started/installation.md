@@ -149,6 +149,13 @@ doc_converter = DocumentConverter(
     )
     ```
 
+    By default, Docling renders PDF regions at 72 DPI and batches four pages per
+    PaddleOCR prediction call. For unusually small text, increase `scale` to
+    `1.5` or `2.0`. Reduce `page_batch_size` if accelerator memory is limited.
+    For production throughput, configure `vl_rec_backend`,
+    `vl_rec_server_url`, and `vl_rec_max_concurrency` to use a PaddleOCR-supported
+    vLLM, FastDeploy, SGLang, or llama.cpp inference service.
+
     ```console
     docling --ocr-engine paddleocr-vl-1.6 INPUT
     ```

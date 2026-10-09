@@ -31,6 +31,8 @@ _DILATION_KERNEL = np.ones((20, 20), dtype=np.uint8)
 
 
 class BaseOcrModel(BasePageModel, BaseModelWithOptions):
+    page_batch_size: int = 1
+
     def __init__(
         self,
         *,
@@ -44,6 +46,9 @@ class BaseOcrModel(BasePageModel, BaseModelWithOptions):
 
         self.enabled = enabled
         self.options = options
+
+    def close(self) -> None:
+        """Release resources owned by the OCR model."""
 
     # Computes the optimum amount and coordinates of rectangles to OCR on a given page
     def get_ocr_rects(self, page: Page) -> List[BoundingBox]:

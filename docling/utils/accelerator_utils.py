@@ -1,10 +1,53 @@
 import logging
-from typing import List, Optional
+import sys
+from typing import Any, List, Optional
 
 from docling.datamodel.accelerator_options import AcceleratorDevice
 from docling.exceptions import AcceleratorDeviceNotAvailableError
 
 _log = logging.getLogger(__name__)
+
+
+def _empty_accelerator_cache(accelerator: Any, name: str) -> None:
+    try:
+        accelerator.empty_cache()
+    except Exception as error:
+        _log.warning("Could not release the %s allocator cache: %s", name, error)
+
+
+def _is_accelerator_available(accelerator: Any, name: str) -> bool:
+    try:
+        return bool(accelerator.is_available())
+    except Exception as error:
+        _log.warning("Could not inspect the %s runtime: %s", name, error)
+        return False
+
+
+def release_accelerator_memory() -> None:
+    """Release unused memory cached by accelerator runtimes already in use."""
+    for module_name, name in (
+        ("torch.cuda", "PyTorch CUDA"),
+        ("torch.mps", "PyTorch MPS"),
+        ("torch.xpu", "PyTorch XPU"),
+    ):
+        accelerator: Any = sys.modules.get(module_name)
+        if accelerator is not None and _is_accelerator_available(accelerator, name):
+            _empty_accelerator_cache(accelerator, name)
+
+    paddle: Any = sys.modules.get("paddle")
+    if paddle is not None:
+        try:
+            if paddle.device.is_compiled_with_cuda():
+                _empty_accelerator_cache(paddle.device.cuda, "Paddle CUDA")
+        except Exception as error:
+            _log.warning("Could not inspect the Paddle CUDA runtime: %s", error)
+
+    mlx_core: Any = sys.modules.get("mlx.core")
+    if mlx_core is not None:
+        try:
+            mlx_core.clear_cache()
+        except Exception as error:
+            _log.warning("Could not release the MLX allocator cache: %s", error)
 
 
 def decide_device(

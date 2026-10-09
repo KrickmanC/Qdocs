@@ -1,9 +1,11 @@
+import gc
 import hashlib
 import logging
 import sys
 import threading
 import time
 import warnings
+import weakref
 from collections.abc import Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -86,10 +88,32 @@ from docling.pipeline.base_pipeline import BasePipeline
 from docling.pipeline.simple_pipeline import SimplePipeline
 from docling.pipeline.standard_pdf_pipeline import StandardPdfPipeline
 from docling.pipeline.video_pipeline import VideoPipeline
+from docling.utils.accelerator_utils import release_accelerator_memory
 from docling.utils.utils import chunkify
 
 _log = logging.getLogger(__name__)
 _PIPELINE_CACHE_LOCK = threading.Lock()
+
+
+def _release_pipeline_resources(
+    pipelines: dict[tuple[Type[BasePipeline], str], BasePipeline],
+) -> None:
+    with _PIPELINE_CACHE_LOCK:
+        cached_pipelines = list(pipelines.values())
+        pipelines.clear()
+
+    for pipeline in cached_pipelines:
+        try:
+            pipeline.close()
+        except Exception:
+            _log.warning(
+                "Failed to close pipeline %s.",
+                type(pipeline).__name__,
+                exc_info=True,
+            )
+    cached_pipelines.clear()
+    gc.collect()
+    release_accelerator_memory()
 
 
 class FormatOption(BaseFormatOption):
@@ -395,11 +419,47 @@ class DocumentConverter:
         self.initialized_pipelines: dict[
             tuple[Type[BasePipeline], str], BasePipeline
         ] = {}
+        self._resource_finalizer: weakref.finalize = weakref.finalize(
+            self,
+            _release_pipeline_resources,
+            self.initialized_pipelines,
+        )
+        self._conversion_lock = threading.Lock()
+        self._active_conversions = 0
 
     def _get_initialized_pipelines(
         self,
     ) -> dict[tuple[Type[BasePipeline], str], BasePipeline]:
         return self.initialized_pipelines
+
+    def _release_cached_resources(self) -> None:
+        _release_pipeline_resources(self.initialized_pipelines)
+
+    def release_resources(self) -> None:
+        """Release cached pipelines and unused accelerator memory.
+
+        Raises:
+            RuntimeError: If this converter is currently processing documents.
+        """
+        with self._conversion_lock:
+            if self._active_conversions > 0:
+                raise RuntimeError(
+                    "Cannot release DocumentConverter resources during a conversion."
+                )
+            self._release_cached_resources()
+
+    def _begin_conversion(self) -> None:
+        with self._conversion_lock:
+            self._active_conversions += 1
+
+    def _finish_conversion(self) -> None:
+        with self._conversion_lock:
+            self._active_conversions -= 1
+            if (
+                self._active_conversions == 0
+                and settings.resources.release_after_conversion
+            ):
+                self._release_cached_resources()
 
     def _get_pipeline_options_hash(self, pipeline_options: PipelineOptions) -> str:
         """Generate a hash of pipeline options to use as part of the cache key."""
@@ -725,24 +785,33 @@ class DocumentConverter:
     def _process_document(
         self, in_doc: InputDocument, raises_on_error: bool
     ) -> ConversionResult:
-        valid = (
-            self.allowed_formats is not None and in_doc.format in self.allowed_formats
-        )
-        if valid:
-            conv_res = self._execute_pipeline(in_doc, raises_on_error=raises_on_error)
-        else:
-            error_message = f"File format not allowed: {in_doc.file}"
-            error_item = ErrorItem(
-                component_type=DoclingComponentType.USER_INPUT,
-                module_name="",
-                error_message=error_message,
-                category=FailureCategory.POLICY,
+        self._begin_conversion()
+        try:
+            valid = (
+                self.allowed_formats is not None
+                and in_doc.format in self.allowed_formats
             )
-            conv_res = ConversionResult(
-                input=in_doc, status=ConversionStatus.SKIPPED, errors=[error_item]
-            )
+            if valid:
+                conv_res = self._execute_pipeline(
+                    in_doc, raises_on_error=raises_on_error
+                )
+            else:
+                error_message = f"File format not allowed: {in_doc.file}"
+                error_item = ErrorItem(
+                    component_type=DoclingComponentType.USER_INPUT,
+                    module_name="",
+                    error_message=error_message,
+                    category=FailureCategory.POLICY,
+                )
+                conv_res = ConversionResult(
+                    input=in_doc,
+                    status=ConversionStatus.SKIPPED,
+                    errors=[error_item],
+                )
 
-        return conv_res
+            return conv_res
+        finally:
+            self._finish_conversion()
 
     def _unload_input_document(self, in_doc: InputDocument) -> None:
         backend = getattr(in_doc, "_backend", None)

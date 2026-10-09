@@ -1,5 +1,7 @@
 import logging
+import time
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +16,7 @@ from docling.datamodel.pipeline_options import OcrOptions, PaddleOcrVlOptions
 from docling.datamodel.settings import settings
 from docling.models.base_ocr_model import BaseOcrModel
 from docling.models.stages.ocr.paddleocr_vl_client import PaddleOcrVlClient
-from docling.utils.profiling import TimeRecorder
+from docling.utils.profiling import TimeIntervalRecorder
 
 _log = logging.getLogger(__name__)
 
@@ -121,6 +123,21 @@ def _text_cells_from_results(
     return cells
 
 
+@dataclass
+class _PageOcrState:
+    page: Page
+    ocr_rects: list[BoundingBox]
+    cells: list[TextCell]
+    recorder: TimeIntervalRecorder | None
+
+
+@dataclass
+class _BufferedOcrInput:
+    state: _PageOcrState
+    ocr_rect: BoundingBox
+    image: numpy.ndarray
+
+
 class PaddleOcrVlModel(BaseOcrModel):
     """OCR adapter for the complete PaddleOCR-VL-1.6 document pipeline."""
 
@@ -139,6 +156,8 @@ class PaddleOcrVlModel(BaseOcrModel):
         )
         self.options: PaddleOcrVlOptions
         self.scale = options.scale
+        self.page_batch_size = options.page_batch_size if self.enabled else 1
+        self.reader: PaddleOcrVlClient | None = None
 
         if not self.enabled:
             return
@@ -160,8 +179,7 @@ class PaddleOcrVlModel(BaseOcrModel):
             "use_seal_recognition": self.options.use_seal_recognition,
             "use_ocr_for_image_block": self.options.use_ocr_for_image_block,
             "format_block_content": self.options.format_block_content,
-            # Docling already owns pipeline threading and page rendering.
-            "use_queues": False,
+            "use_queues": self.options.use_queues,
             "cpu_threads": accelerator_options.num_threads,
         }
         optional_kwargs = {
@@ -169,6 +187,10 @@ class PaddleOcrVlModel(BaseOcrModel):
             "device": _paddle_device(accelerator_options.device),
             "layout_detection_model_dir": self.options.layout_detection_model_dir,
             "vl_rec_model_dir": self.options.vl_rec_model_dir,
+            "vl_rec_backend": self.options.vl_rec_backend,
+            "vl_rec_server_url": self.options.vl_rec_server_url,
+            "vl_rec_max_concurrency": self.options.vl_rec_max_concurrency,
+            "vl_rec_api_model_name": self.options.vl_rec_api_model_name,
             "layout_threshold": self.options.layout_threshold,
         }
         init_kwargs.update(
@@ -183,49 +205,101 @@ class PaddleOcrVlModel(BaseOcrModel):
             yield from page_batch
             return
 
+        states: list[_PageOcrState] = []
+        buffered_inputs: list[_BufferedOcrInput] = []
         for page in page_batch:
             assert page._backend is not None
             if not page._backend.is_valid():
-                yield page
+                states.append(
+                    _PageOcrState(
+                        page=page,
+                        ocr_rects=[],
+                        cells=[],
+                        recorder=None,
+                    )
+                )
                 continue
 
-            with TimeRecorder(conv_res, "ocr"):
-                ocr_rects = self.get_ocr_rects(page)
-                all_ocr_cells: list[TextCell] = []
-                for ocr_rect in ocr_rects:
-                    if ocr_rect.area() == 0:
-                        continue
+            recorder = TimeIntervalRecorder(conv_res, "ocr")
+            recorder.resume()
+            ocr_rects = self.get_ocr_rects(page)
+            state = _PageOcrState(
+                page=page,
+                ocr_rects=ocr_rects,
+                cells=[],
+                recorder=recorder,
+            )
+            states.append(state)
 
-                    high_res_image = page._backend.get_page_image(
-                        scale=self.scale, cropbox=ocr_rect
-                    ).convert("RGB")
-                    # PaddleX reads NumPy image inputs in BGR order.
-                    image = numpy.ascontiguousarray(
-                        numpy.asarray(high_res_image)[:, :, ::-1]
+            for ocr_rect in ocr_rects:
+                if ocr_rect.area() == 0:
+                    continue
+
+                high_res_image = page._backend.get_page_image(
+                    scale=self.scale, cropbox=ocr_rect
+                ).convert("RGB")
+                # PaddleX reads NumPy image inputs in BGR order.
+                buffered_inputs.append(
+                    _BufferedOcrInput(
+                        state=state,
+                        ocr_rect=ocr_rect,
+                        image=numpy.ascontiguousarray(
+                            numpy.asarray(high_res_image)[:, :, ::-1]
+                        ),
                     )
-                    results = self.reader.predict(input=image)
-                    if results is None:
-                        _log.warning("PaddleOCR-VL returned no result.")
-                    else:
-                        all_ocr_cells.extend(
-                            _text_cells_from_results(
-                                results,
-                                scale=self.scale,
-                                offset_x=ocr_rect.l,
-                                offset_y=ocr_rect.t,
-                                start_index=len(all_ocr_cells),
-                            )
-                        )
+                )
+                del high_res_image
+            recorder.pause()
 
-                    del high_res_image
-                    del image
+        if buffered_inputs:
+            images = [entry.image for entry in buffered_inputs]
+            inference_started = time.monotonic()
+            if self.reader is None:
+                raise RuntimeError("The PaddleOCR-VL worker is closed.")
+            results = self.reader.predict(inputs=images)
+            inference_seconds = time.monotonic() - inference_started
+            del images
 
-                self.post_process_cells(all_ocr_cells, page)
+            if len(results) != len(buffered_inputs):
+                raise RuntimeError(
+                    "PaddleOCR-VL returned "
+                    f"{len(results)} results for {len(buffered_inputs)} input images."
+                )
 
-            if settings.debug.visualize_ocr:
-                self.draw_ocr_rects_and_cells(conv_res, page, ocr_rects)
+            seconds_per_input = inference_seconds / len(buffered_inputs)
+            for entry, result in zip(buffered_inputs, results):
+                assert entry.state.recorder is not None
+                entry.state.recorder.add(seconds_per_input)
+                entry.state.cells.extend(
+                    _text_cells_from_results(
+                        (result,),
+                        scale=self.scale,
+                        offset_x=entry.ocr_rect.l,
+                        offset_y=entry.ocr_rect.t,
+                        start_index=len(entry.state.cells),
+                    )
+                )
+            buffered_inputs.clear()
 
-            yield page
+        for state in states:
+            if state.recorder is not None:
+                state.recorder.resume()
+                self.post_process_cells(state.cells, state.page)
+                state.recorder.pause()
+                state.recorder.close()
+
+                if settings.debug.visualize_ocr:
+                    self.draw_ocr_rects_and_cells(conv_res, state.page, state.ocr_rects)
+
+            yield state.page
+
+    def close(self) -> None:
+        """Stop the isolated PaddleOCR-VL worker process."""
+        if self.reader is None:
+            return
+        reader = self.reader
+        self.reader = None
+        reader.close()
 
     @classmethod
     def get_options_type(cls) -> type[OcrOptions]:

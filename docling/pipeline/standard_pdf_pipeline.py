@@ -48,6 +48,7 @@ from docling.datamodel.base_models import (
 from docling.datamodel.document import ConversionResult
 from docling.datamodel.pipeline_options import ThreadedPdfPipelineOptions
 from docling.datamodel.settings import settings
+from docling.models.base_ocr_model import BaseOcrModel
 from docling.models.factories import (
     get_layout_factory,
     get_ocr_factory,
@@ -182,22 +183,34 @@ class ThreadedQueue:
 
     # ------------------------------------------------------------ get_batch()
     def get_batch(self, size: int, timeout: float | None = None) -> list[ThreadedItem]:
-        """Return up to *size* items.  Blocks until ≥1 item present or queue closed/timeout."""
+        """Collect up to *size* items until the batch is full, closed, or timed out."""
+        if size < 1:
+            raise ValueError("Batch size must be at least 1.")
+
         with self._not_empty:
-            start = time.monotonic()
-            while not self._items and not self._closed:
-                if timeout is not None:
-                    remaining = timeout - (time.monotonic() - start)
-                    if remaining <= 0:
-                        return []
-                    self._not_empty.wait(remaining)
-                else:
-                    self._not_empty.wait()
+            deadline = None if timeout is None else time.monotonic() + timeout
             batch: list[ThreadedItem] = []
-            while self._items and len(batch) < size:
-                batch.append(self._items.popleft())
-            if batch:
+
+            while len(batch) < size:
+                while not self._items and not self._closed:
+                    if deadline is None:
+                        self._not_empty.wait()
+                        continue
+
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        return batch
+                    self._not_empty.wait(remaining)
+
+                while self._items and len(batch) < size:
+                    batch.append(self._items.popleft())
                 self._not_full.notify_all()
+
+                if len(batch) == size or self._closed:
+                    return batch
+                if deadline is not None and time.monotonic() >= deadline:
+                    return batch
+
             return batch
 
     # ---------------------------------------------------------------- close()
@@ -652,7 +665,7 @@ class StandardPdfPipeline(ConvertPipeline):
         )
 
     # ---------------------------------------------------------------- helpers
-    def _make_ocr_model(self, art_path: Path | None) -> Any:
+    def _make_ocr_model(self, art_path: Path | None) -> BaseOcrModel:
         factory = get_ocr_factory(
             allow_external_plugins=self.pipeline_options.allow_external_plugins
         )
@@ -691,7 +704,7 @@ class StandardPdfPipeline(ConvertPipeline):
         ocr = ThreadedPipelineStage(
             name="ocr",
             model=self.ocr_model,
-            batch_size=opts.ocr_batch_size,
+            batch_size=max(opts.ocr_batch_size, self.ocr_model.page_batch_size),
             batch_timeout=opts.batch_polling_interval_seconds,
             queue_max_size=opts.queue_max_size,
             timed_out_run_ids=timed_out_run_ids,
@@ -1152,3 +1165,6 @@ class StandardPdfPipeline(ConvertPipeline):
                 p._backend.unload()
         if conv_res.input._backend:
             conv_res.input._backend.unload()
+
+    def close(self) -> None:
+        self.ocr_model.close()

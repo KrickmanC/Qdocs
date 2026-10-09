@@ -82,6 +82,40 @@ pipeline_options = PdfPipelineOptions(
 )
 ```
 
+The PaddleOCR-VL defaults are throughput-oriented: PDF regions are rendered at
+72 DPI (`scale=1.0`), up to four Docling pages are submitted in one prediction
+call, and PaddleOCR's asynchronous layout/VLM queues are enabled. This allows
+PP-DocLayoutV3 analysis for later pages to overlap with VLM inference.
+
+For documents with unusually small print, increase `scale` gradually. Rendering
+at `scale=3.0` uses nine times as many pixels as `scale=1.0`. If GPU or system
+memory is constrained, lower `page_batch_size`:
+
+```py
+pipeline_options.ocr_options = PaddleOcrVlOptions(
+    scale=1.5,
+    page_batch_size=2,
+)
+```
+
+Local `paddle_dynamic` inference is intended primarily for validation. For high
+throughput, run one of PaddleOCR's supported VLM inference servers and point the
+Docling OCR adapter to it. The client still runs PP-DocLayoutV3 locally, while
+recognition requests are batched and sent concurrently:
+
+```py
+pipeline_options.ocr_options = PaddleOcrVlOptions(
+    vl_rec_backend="vllm-server",
+    vl_rec_server_url="http://localhost:8118/v1",
+    vl_rec_max_concurrency=16,
+)
+```
+
+See the [PaddleOCR-VL inference-service guide](https://www.paddleocr.ai/latest/en/version3.x/pipeline_usage/PaddleOCR-VL.html#using-vlm-inference-services)
+for the vLLM, FastDeploy, SGLang, and llama.cpp server commands. NVIDIA
+Blackwell GPUs, including the RTX 50 series, have a
+[dedicated setup guide](https://www.paddleocr.ai/latest/en/version3.x/pipeline_usage/PaddleOCR-VL-NVIDIA-Blackwell.html).
+
 More RapidOCR details are available in the GitHub discussion [#2451](https://github.com/docling-project/docling/discussions/2451).
 
 

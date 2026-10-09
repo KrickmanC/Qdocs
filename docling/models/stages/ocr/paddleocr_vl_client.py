@@ -195,7 +195,10 @@ class PaddleOcrVlClient:
             )
         return response
 
-    def predict(self, *, input: numpy.ndarray) -> list[PaddleOcrVlResult]:
+    def predict(self, *, inputs: list[numpy.ndarray]) -> list[PaddleOcrVlResult]:
+        if not inputs:
+            return []
+
         with self._lock:
             if self._closed:
                 raise PaddleOcrVlWorkerError("PaddleOCR worker is already closed.")
@@ -205,7 +208,7 @@ class PaddleOcrVlClient:
                 )
 
             try:
-                self._connection.send(PredictRequest(image=input))
+                self._connection.send(PredictRequest(images=inputs))
                 response = self._receive(
                     operation="predict", timeout=_PREDICT_TIMEOUT_SECONDS
                 )

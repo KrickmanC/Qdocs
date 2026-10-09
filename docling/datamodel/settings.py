@@ -55,6 +55,10 @@ class InferenceSettings(BaseModel):
     compile_torch_models: bool = True
 
 
+class ResourceSettings(BaseModel):
+    release_after_conversion: bool = False
+
+
 class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="DOCLING_", env_nested_delimiter="_", env_nested_max_split=1
@@ -63,6 +67,7 @@ class AppSettings(BaseSettings):
     perf: BatchConcurrencySettings = BatchConcurrencySettings()
     debug: DebugSettings = DebugSettings()
     inference: InferenceSettings = InferenceSettings()
+    resources: ResourceSettings = ResourceSettings()
 
     cache_dir: Path = Path.home() / ".cache" / "docling"
     artifacts_path: Optional[Path] = None
@@ -82,12 +87,14 @@ def scoped(
     perf: BatchConcurrencySettings | None = None,
     debug: DebugSettings | None = None,
     inference: InferenceSettings | None = None,
+    resources: ResourceSettings | None = None,
 ) -> Iterator[AppSettings]:
     """Temporarily override selected settings and restore them on exit."""
     saved = {
         "perf": settings.perf.model_copy(deep=True),
         "debug": settings.debug.model_copy(deep=True),
         "inference": settings.inference.model_copy(deep=True),
+        "resources": settings.resources.model_copy(deep=True),
     }
 
     try:
@@ -97,11 +104,14 @@ def scoped(
             settings.debug = debug
         if inference is not None:
             settings.inference = inference
+        if resources is not None:
+            settings.resources = resources
         yield settings
     finally:
         settings.perf = saved["perf"].model_copy(deep=True)
         settings.debug = saved["debug"].model_copy(deep=True)
         settings.inference = saved["inference"].model_copy(deep=True)
+        settings.resources = saved["resources"].model_copy(deep=True)
 
 
 def default_compile_model() -> bool:

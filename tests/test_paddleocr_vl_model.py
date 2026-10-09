@@ -44,8 +44,13 @@ def test_paddleocr_vl_initializes_fixed_pipeline_pair(
         artifacts_path=None,
         options=PaddleOcrVlOptions(
             engine="paddle",
+            page_batch_size=6,
             layout_detection_model_dir="layout-model",
             vl_rec_model_dir="vl-model",
+            vl_rec_backend="vllm-server",
+            vl_rec_server_url="http://localhost:8118/v1",
+            vl_rec_max_concurrency=12,
+            vl_rec_api_model_name="PaddlePaddle/PaddleOCR-VL-1.6",
             layout_threshold=0.65,
             use_doc_orientation_classify=True,
             use_doc_unwarping=True,
@@ -58,6 +63,7 @@ def test_paddleocr_vl_initializes_fixed_pipeline_pair(
     )
 
     assert isinstance(model.reader, FakePaddleOcrVlClient)
+    assert model.page_batch_size == 6
     assert captured == {
         "pipeline_version": "v1.6",
         "layout_detection_model_name": "PP-DocLayoutV3",
@@ -68,22 +74,26 @@ def test_paddleocr_vl_initializes_fixed_pipeline_pair(
         "use_seal_recognition": True,
         "use_ocr_for_image_block": True,
         "format_block_content": True,
-        "use_queues": False,
+        "use_queues": True,
         "cpu_threads": 6,
         "engine": "paddle",
         "device": "gpu:2",
         "layout_detection_model_dir": "layout-model",
         "vl_rec_model_dir": "vl-model",
+        "vl_rec_backend": "vllm-server",
+        "vl_rec_server_url": "http://localhost:8118/v1",
+        "vl_rec_max_concurrency": 12,
+        "vl_rec_api_model_name": "PaddlePaddle/PaddleOCR-VL-1.6",
         "layout_threshold": 0.65,
     }
 
 
 class _RecordingPaddleReader:
     def __init__(self) -> None:
-        self.images: list[np.ndarray] = []
+        self.batches: list[list[np.ndarray]] = []
 
-    def predict(self, *, input: np.ndarray) -> list[object]:
-        self.images.append(input)
+    def predict(self, *, inputs: list[np.ndarray]) -> list[object]:
+        self.batches.append(inputs)
         return [
             SimpleNamespace(
                 json={
@@ -101,6 +111,7 @@ class _RecordingPaddleReader:
                     }
                 }
             )
+            for _ in inputs
         ]
 
 
@@ -135,18 +146,47 @@ def test_paddleocr_vl_maps_ordered_blocks_to_ocr_cells() -> None:
     model.get_ocr_rects = Mock(return_value=[ocr_rect])
     model.post_process_cells = Mock()
 
-    page = Page(page_no=1, size=Size(width=20, height=20))
-    page._backend = _ImageBackend()  # type: ignore[assignment]
+    pages = [
+        Page(page_no=page_no, size=Size(width=20, height=20)) for page_no in (1, 2)
+    ]
+    for page in pages:
+        page._backend = _ImageBackend()  # type: ignore[assignment]
 
-    assert list(model(Mock(), [page])) == [page]
-    assert len(reader.images) == 1
-    assert reader.images[0].flags.c_contiguous
-    assert reader.images[0][0, 0].tolist() == [30, 20, 10]
+    assert list(model(Mock(), pages)) == pages
+    assert len(reader.batches) == 1
+    assert len(reader.batches[0]) == 2
+    assert reader.batches[0][0].flags.c_contiguous
+    assert reader.batches[0][0][0, 0].tolist() == [30, 20, 10]
 
-    cells = model.post_process_cells.call_args.args[0]
+    assert model.post_process_cells.call_count == 2
+    cells = model.post_process_cells.call_args_list[0].args[0]
     assert len(cells) == 1
     assert cells[0].text == "Recognized text"
     assert cells[0].orig == "Recognized text"
     assert cells[0].from_ocr is True
     assert cells[0].rect.to_bounding_box().as_tuple() == (6.0, 9.0, 10.0, 13.0)
-    assert model.post_process_cells.call_args.args[1] is page
+    assert model.post_process_cells.call_args_list[0].args[1] is pages[0]
+    assert model.post_process_cells.call_args_list[1].args[1] is pages[1]
+
+
+def test_paddleocr_vl_defaults_enable_batched_low_resolution_inference() -> None:
+    options = PaddleOcrVlOptions()
+
+    assert options.scale == 1.0
+    assert options.page_batch_size == 4
+    assert options.use_queues is True
+
+    with pytest.raises(ValueError):
+        PaddleOcrVlOptions(page_batch_size=0)
+
+
+def test_paddleocr_vl_close_stops_worker_once() -> None:
+    model = PaddleOcrVlModel.__new__(PaddleOcrVlModel)
+    reader = Mock()
+    model.reader = reader
+
+    model.close()
+    model.close()
+
+    reader.close.assert_called_once_with()
+    assert model.reader is None

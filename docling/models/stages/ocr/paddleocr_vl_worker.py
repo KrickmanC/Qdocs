@@ -60,7 +60,7 @@ def _send_error(connection: Connection, *, operation: str, error: Exception) -> 
 
 
 def _predict(pipeline: Any, request: PredictRequest) -> PredictionResponse:
-    raw_results = pipeline.predict(input=request.image)
+    raw_results = pipeline.predict(input=request.images)
     if raw_results is None:
         return PredictionResponse(results=[])
 

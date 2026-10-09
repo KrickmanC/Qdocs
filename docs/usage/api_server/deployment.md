@@ -48,8 +48,41 @@ These tune Docling itself and are read by the server too:
 | `DOCLING_PERF_PAGE_BATCH_SIZE` | pages per batch | runtime default |
 | `DOCLING_PERF_ELEMENTS_BATCH_SIZE` | elements per batch | runtime default |
 | `DOCLING_DEBUG_PROFILE_PIPELINE_TIMINGS` | log per-stage timings | `false` |
+| `DOCLING_RESOURCES_RELEASE_AFTER_CONVERSION` | unload cached pipelines and empty accelerator allocator caches after the last active conversion | `false` |
 
 For how to *choose* device/perf values see [GPU support](../gpu.md). For offline / air-gapped model setup see the [FAQ](../../faq/index.md) and [Advanced options](../advanced_options.md); set `DOCLING_SERVE_ARTIFACTS_PATH` to a pre-populated model directory.
+
+### Release models while the server is idle
+
+By default, docling-serve keeps initialized converters and models in memory so that
+the next request starts quickly. For an on-demand server where low idle memory is
+more important than warm-request latency, use:
+
+=== "Linux / macOS"
+
+    ```sh
+    DOCLING_RESOURCES_RELEASE_AFTER_CONVERSION=true \
+    DOCLING_SERVE_LOAD_MODELS_AT_BOOT=false \
+    DOCLING_SERVE_OPTIONS_CACHE_SIZE=0 \
+    DOCLING_SERVE_ENG_LOC_NUM_WORKERS=1 \
+    docling-serve run
+    ```
+
+=== "PowerShell"
+
+    ```powershell
+    $env:DOCLING_RESOURCES_RELEASE_AFTER_CONVERSION = "true"
+    $env:DOCLING_SERVE_LOAD_MODELS_AT_BOOT = "false"
+    $env:DOCLING_SERVE_OPTIONS_CACHE_SIZE = "0"
+    $env:DOCLING_SERVE_ENG_LOC_NUM_WORKERS = "1"
+    docling-serve run
+    ```
+
+This closes model-owned worker processes, drops cached pipelines, runs Python
+garbage collection, and returns unused CUDA, MPS, XPU, Paddle CUDA, and MLX
+allocator blocks to the runtime. A small amount of device memory can remain for
+the accelerator context itself. The next request has to initialize the models
+again.
 
 ## Compute engines
 

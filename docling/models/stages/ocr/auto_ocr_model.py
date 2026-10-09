@@ -150,6 +150,11 @@ class OcrAutoModel(BaseOcrModel):
             return
         yield from self._engine(conv_res, page_batch)
 
+    def close(self) -> None:
+        if self._engine is None:
+            return
+        self._engine.close()
+
     @classmethod
     def get_options_type(cls) -> Type[OcrOptions]:
         return OcrAutoOptions

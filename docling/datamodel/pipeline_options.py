@@ -359,11 +359,34 @@ class PaddleOcrVlOptions(OcrOptions):
         Field(
             description=(
                 "Scale factor used to render page regions before PaddleOCR-VL "
-                "inference. A value of 3 corresponds to 216 DPI for PDF pages."
+                "inference. A value of 1 corresponds to 72 DPI for PDF pages. "
+                "Increase this for unusually small text at the cost of quadratic "
+                "image memory and preprocessing work."
             ),
             gt=0,
         ),
-    ] = 3.0
+    ] = 1.0
+    page_batch_size: Annotated[
+        int,
+        Field(
+            description=(
+                "Number of Docling pages collected for one PaddleOCR-VL prediction "
+                "call. Batching lets PaddleOCR overlap layout analysis and VLM "
+                "inference across pages. Reduce this value if accelerator memory is "
+                "limited."
+            ),
+            ge=1,
+        ),
+    ] = 4
+    use_queues: Annotated[
+        bool,
+        Field(
+            description=(
+                "Enable PaddleOCR's internal asynchronous layout-analysis and VLM "
+                "queues. This improves throughput for multi-page batches."
+            )
+        ),
+    ] = True
     engine: Annotated[
         Optional[Literal["paddle"]],
         Field(
@@ -389,6 +412,50 @@ class PaddleOcrVlOptions(OcrOptions):
             description=(
                 "Local PaddleOCR-VL-1.6-0.9B model directory. When omitted, "
                 "PaddleOCR downloads the official model."
+            )
+        ),
+    ] = None
+    vl_rec_backend: Annotated[
+        Optional[
+            Literal[
+                "vllm-server",
+                "sglang-server",
+                "fastdeploy-server",
+                "mlx-vlm-server",
+                "llama-cpp-server",
+            ]
+        ],
+        Field(
+            description=(
+                "Optional accelerated inference-server backend for the VLM stage. "
+                "None runs the VLM in the isolated local PaddleOCR worker."
+            )
+        ),
+    ] = None
+    vl_rec_server_url: Annotated[
+        Optional[str],
+        Field(
+            description=(
+                "Base URL of the VLM inference service, for example "
+                "'http://localhost:8118/v1'."
+            )
+        ),
+    ] = None
+    vl_rec_max_concurrency: Annotated[
+        Optional[int],
+        Field(
+            description=(
+                "Maximum number of concurrent VLM requests sent to an inference "
+                "service. None uses the PaddleOCR default."
+            ),
+            ge=1,
+        ),
+    ] = None
+    vl_rec_api_model_name: Annotated[
+        Optional[str],
+        Field(
+            description=(
+                "Model name exposed by an OpenAI-compatible VLM inference service."
             )
         ),
     ] = None
